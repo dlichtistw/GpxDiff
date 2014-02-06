@@ -6,7 +6,7 @@ class GpxDocument {
 	public $rtes = array();
 	public $trks = array();
 	
-	private $document;
+	public $document;
 	
 	public function __construct () {
 		$this -> document = new DOMDocument();
@@ -188,7 +188,7 @@ class GpxDocument {
 			}
 			$lon = $trkpt -> getAttribute('lon');
 			if (!empty($lon)) {
-				$lond = $lat - $ref['lon'];
+				$lond = $lon - $ref['lon'];
 			} else {
 				continue;
 			}
@@ -201,10 +201,15 @@ class GpxDocument {
 	}
 	
 	public function applyDiff ($diffs) {
+		echo 'Applying difference to input file' . "\n";
+		
 		usort($diffs, 'WptDiff::diffComp');
 		
+		echo "\t" . '... adjusting trackpoints' . "\n";
 		$trkpts = $this -> document -> getElementsByTagName('trkpt');
 		$this -> adjustPts($diffs, $trkpts);
+		
+		echo "\t" . '... adjusting waypoints' . "\n";
 		$wpts = $this -> document -> getElementsByTagName('wpt');
 		$this -> adjustPts($diffs, $wpts);
 	}
@@ -233,20 +238,31 @@ class GpxDocument {
 			for ($i = 0; $i < $diffsc - 1; $i++) {
 				$diff = $diffs[$i];
 				$nextDiff = $diffs[$i + 1];
+				
 				if ($timeStp < $diff -> time) {
 					$pt -> parentNode -> removeChild($pt);
 					break;
 				}
 				if ($timeStp > $nextDiff -> time) {
-					continue;
+					if ($i >= $diffsc - 1) {
+						$pt -> parentNode -> removeChild($pt);
+						break;
+					} else {
+						continue;
+					}
 				}
 				
 				$ptOffsRat = ($timeStp - $diff -> time) / ($nextDiff -> time - $diff -> time);
+//				echo 'lat: ' . $lat . "\t" . 'lon: ' . $lon . "\n";
+//				echo 'off: ' . $ptOffsRat . "\n";
+//				echo 'lat: ' . $nextDiff -> lat . "\t" . 'lon: ' . $nextDiff -> lon . "\n";
 				$lat -= ($ptOffsRat * $nextDiff -> lat + (1 - $ptOffsRat) * $diff -> lat);
 				$lon -= ($ptOffsRat * $nextDiff -> lon + (1 - $ptOffsRat) * $diff -> lon);
 				
 				$pt -> setAttribute('lat', $lat);
 				$pt -> setAttribute('lon', $lon);
+				
+				break;
 			}
 		}
 	}

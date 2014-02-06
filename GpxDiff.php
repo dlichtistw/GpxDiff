@@ -69,11 +69,18 @@ print 'Done loading files' . "\n\n";
 
 $ref = $rdoc -> totalAvg(true);
 $diffs = $rdoc -> totalDiff($ref);
-$rdoc -> applyDiff($diffs);
+$idoc -> applyDiff($diffs);
+
+$average = $idoc -> document -> createElement('wpt');
+$average -> setAttribute('lat', $ref['lat']);
+$average -> setAttribute('lon', $ref['lon']);
+$average -> appendChild($idoc -> document -> createElement('src', 'generated'));
+$average -> appendChild($idoc -> document -> createElement('name', 'Reference point'));
+$idoc -> document -> getElementsByTagName('gpx') -> item(0) -> appendChild($average);
 
 if (!empty($ofname)) {
 	try {
-		$rdoc -> toFile($ofname);
+		$idoc -> toFile($ofname);
 	} catch (Exception $e) {
 		print 'Warning: Could not write output file ' . $ifname . "\n";
 		exit();
