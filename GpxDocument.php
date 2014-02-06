@@ -19,7 +19,7 @@ class GpxDocument {
 		$this -> document -> save($filename);
 	}
 	
-	public function totalAvg ($addAsWpt = true, $track = true, $segment = true) {
+	public function totalAvg ($addAsWpt = false, $track = true, $segment = true) {
 		$sum = array(
 			'lat' => 0,
 			'latc' => 0,
@@ -112,6 +112,7 @@ class GpxDocument {
 		}
 	}
 	
+	// Extracts the pointwise difference between the measured position and the reference point (measurement - reference).
 	public function totalDiff ($ref, $track = true, $segment = true) {
 		$diffs = array();
 		$sum = array(
@@ -151,6 +152,7 @@ class GpxDocument {
 		print "\t" . '... Latitude error  = ' . $err['latd'] . "\n";
 		print "\t" . '... Longitude error = ' . $err['lond'] . "\n";
 		print "\t" . '... Total error     = ' . $err['totd'] . "\n";
+		print "\n";
 		
 		return $diffs;
 	}
@@ -172,7 +174,7 @@ class GpxDocument {
 			$timeEls = $trkpt -> getElementsByTagName('time');
 			if ($timeEls -> length) {
 				$timeStr = $timeEls -> item(0) -> nodeValue;
-				if ($time = date_create($timeStr, new DateTimeZone('UTC')) === false) {
+				if (($time = date_create($timeStr, new DateTimeZone('UTC'))) === false) {
 					continue;
 				}
 			} else {
@@ -191,10 +193,61 @@ class GpxDocument {
 				continue;
 			}
 			
-			$diffs[] = new WptDiff($time, $latd, $lond);
+			$diffs[] = new WptDiff($time -> format('U'), $latd, $lond);
 			$sum['latd'] += $latd * $latd;
 			$sum['lond'] += $lond * $lond;
 			$sum['count']++;
+		}
+	}
+	
+	public function applyDiff ($diffs) {
+		usort($diffs, 'WptDiff::diffComp');
+		
+		$trkpts = $this -> document -> getElementsByTagName('trkpt');
+		$this -> adjustPts($diffs, $trkpts);
+		$wpts = $this -> document -> getElementsByTagName('wpt');
+		$this -> adjustPts($diffs, $wpts);
+	}
+	private function adjustPts ($diffs, $pts) {
+		foreach ($pts as $pt) {
+			// Extract time and ignore this point if it does not have a valid time
+			$timeEls = $pt -> getElementsByTagName('time');
+			if ($timeEls -> length) {
+				$timeStr = $timeEls -> item(0) -> nodeValue;
+				if (($time = date_create($timeStr, new DateTimeZone('UTC'))) === false) {
+					continue;
+				}
+			} else {
+				continue;
+			}
+			$timeStp = $time -> format('U');
+			
+			$lat = $pt -> getAttribute('lat');
+			$lon = $pt -> getAttribute('lon');
+			if (empty($lat) || empty($lon)) {
+				$pt -> parentNode -> removeChild($pt);
+				continue;
+			}
+			
+			$diffsc = count($diffs);
+			for ($i = 0; $i < $diffsc - 1; $i++) {
+				$diff = $diffs[$i];
+				$nextDiff = $diffs[$i + 1];
+				if ($timeStp < $diff -> time) {
+					$pt -> parentNode -> removeChild($pt);
+					break;
+				}
+				if ($timeStp > $nextDiff -> time) {
+					continue;
+				}
+				
+				$ptOffsRat = ($timeStp - $diff -> time) / ($nextDiff -> time - $diff -> time);
+				$lat -= ($ptOffsRat * $nextDiff -> lat + (1 - $ptOffsRat) * $diff -> lat);
+				$lon -= ($ptOffsRat * $nextDiff -> lon + (1 - $ptOffsRat) * $diff -> lon);
+				
+				$pt -> setAttribute('lat', $lat);
+				$pt -> setAttribute('lon', $lon);
+			}
 		}
 	}
 	

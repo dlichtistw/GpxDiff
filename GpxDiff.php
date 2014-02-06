@@ -67,8 +67,9 @@ if (!empty($rfname)) {
 
 print 'Done loading files' . "\n\n";
 
-$ref = $rdoc -> totalAvg();
+$ref = $rdoc -> totalAvg(true);
 $diffs = $rdoc -> totalDiff($ref);
+$rdoc -> applyDiff($diffs);
 
 if (!empty($ofname)) {
 	try {
