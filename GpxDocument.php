@@ -54,6 +54,7 @@ class GpxDocument {
 			$avg['lon'] = $sum['lon'] / $sum['lonc'];
 		}
 		
+		// Add a waypoint at the average position to the end of the GPX document if so requested
 		if ($addAsWpt) {
 			$rangeDesc = '';
 			if ($segment === true) {
@@ -114,12 +115,10 @@ class GpxDocument {
 	public function totalDiff ($ref, $track = true, $segment = true) {
 		$diffs = array();
 		$sum = array(
-			'lat' => 0,
-			'latc' => 0,
-			'lon' => 0,
-			'lonc' => 0,
-			'ele' => 0,
-			'elec' => 0,
+			'latd' => 0,
+			'lond' => 0,
+			'eled' => 0,
+			'count' => 0,
 		);
 		
 		print 'Extracting differences ...' . "\n";
@@ -128,12 +127,32 @@ class GpxDocument {
 		if ($track === true) {
 			for ($i = 0; $i < $trks -> length; $i++) {
 				print "\t" . '... from track ' . ($i + 1) . "\n";
-				$this -> trkDiff($trks -> item($i), $ref, $diffs, $segment, sum);
+				$this -> trkDiff($trks -> item($i), $ref, $diffs, $sum, $segment);
 			}
 		} else {
 			print "\t" . '... from track ' . ($track + 1) . "\n";
-			$this -> trkDiff($trks -> item($track), $ref, $diffs, $segment, sum);
+			$this -> trkDiff($trks -> item($track), $ref, $diffs, $sum, $segment);
 		}
+		
+		$err = array(
+			'latd' => 0,
+			'lond' => 0,
+			'eled' => 0,
+			'totd' => 0
+		);
+		if ($sum['count'] > 0) {
+			$err['latd'] = sqrt($sum['latd']) / $sum['count'];
+			$err['lond'] = sqrt($sum['lond']) / $sum['count'];
+			$err['eled'] = sqrt($sum['eled']) / $sum['count'];
+			$err['totd'] = sqrt($sum['latd'] + $sum['lond'] + $sum['eled']) / (3 * $sum['count']);
+		}
+		
+		print 'Done extracting differences:' . "\n";
+		print "\t" . '... Latitude error  = ' . $err['latd'] . "\n";
+		print "\t" . '... Longitude error = ' . $err['lond'] . "\n";
+		print "\t" . '... Total error     = ' . $err['totd'] . "\n";
+		
+		return $diffs;
 	}
 	private function trkDiff ($trk, $ref, &$diffs, &$sum, $segment) {
 		$trksegs = $trk -> getElementsByTagName('trkseg');
@@ -150,15 +169,32 @@ class GpxDocument {
 	private function trksegDiff ($trkseg, $ref, &$diffs, &$sum) {
 		$trkpts = $trkseg -> getElementsByTagName('trkpt');
 		foreach ($trkpts as $trkpt) {
+			$timeEls = $trkpt -> getElementsByTagName('time');
+			if ($timeEls -> length) {
+				$timeStr = $timeEls -> item(0) -> nodeValue;
+				if ($time = date_create($timeStr, new DateTimeZone('UTC')) === false) {
+					continue;
+				}
+			} else {
+				continue;
+			}
 			$lat = $trkpt -> getAttribute('lat');
 			if (!empty($lat)) {
 				$latd = $lat - $ref['lat'];
-				$sum['latc']++;
+			} else {
+				continue;
 			}
 			$lon = $trkpt -> getAttribute('lon');
 			if (!empty($lon)) {
-				$sum['lonc']++;
+				$lond = $lat - $ref['lon'];
+			} else {
+				continue;
 			}
+			
+			$diffs[] = new WptDiff($time, $latd, $lond);
+			$sum['latd'] += $latd * $latd;
+			$sum['lond'] += $lond * $lond;
+			$sum['count']++;
 		}
 	}
 	
